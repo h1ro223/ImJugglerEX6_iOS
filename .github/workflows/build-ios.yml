@@ -1,0 +1,89 @@
+name: Build iOS IPA
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+      - name: リポジトリを取得
+        uses: actions/checkout@v4
+
+      - name: Node.js をセットアップ
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 環境を確認
+        run: |
+          echo "--- Xcode ---"
+          xcodebuild -version
+          echo "--- Node ---"
+          node -v
+          echo "--- www の中身 ---"
+          ls -la www/ || (echo "::error::www/ フォルダがありません。ゲーム本体を www/ に入れてください" && exit 1)
+          test -f www/index.html || (echo "::error::www/index.html がありません" && exit 1)
+
+      - name: 依存パッケージをインストール
+        run: npm install
+
+      - name: iOS プロジェクトを生成
+        run: |
+          npx cap add ios
+          npx cap sync ios
+          echo "--- 生成されたもの ---"
+          ls -la ios/App/
+
+      - name: アプリの表示名と画面向きを設定
+        run: |
+          PLIST=ios/App/App/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName アイムジャグラーEX シミュレーター" "$PLIST" 2>/dev/null \
+            || /usr/libexec/PlistBuddy -c "Add :CFBundleDisplayName string アイムジャグラーEX シミュレーター" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Delete :UISupportedInterfaceOrientations" "$PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :UISupportedInterfaceOrientations array" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Add :UISupportedInterfaceOrientations:0 string UIInterfaceOrientationPortrait" "$PLIST"
+          echo "--- Info.plist 確認 ---"
+          /usr/libexec/PlistBuddy -c "Print" "$PLIST" | head -30
+
+      - name: ビルド（コード署名なし）
+        run: |
+          cd ios/App
+          if [ -d "App.xcworkspace" ]; then
+            echo "workspace 方式でビルドします"
+            TARGET_ARG="-workspace App.xcworkspace"
+          else
+            echo "project 方式でビルドします"
+            TARGET_ARG="-project App.xcodeproj"
+          fi
+          xcodebuild \
+            $TARGET_ARG \
+            -scheme App \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath build \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            ONLY_ACTIVE_ARCH=NO \
+            build
+
+      - name: .ipa にパッケージング
+        run: |
+          cd ios/App/build/Build/Products/Release-iphoneos
+          ls -la
+          mkdir -p Payload
+          cp -r App.app Payload/
+          zip -qry ImJugglerEX.ipa Payload
+          echo "--- 完成した .ipa ---"
+          ls -lh ImJugglerEX.ipa
+
+      - name: 成果物をアップロード
+        uses: actions/upload-artifact@v4
+        with:
+          name: ImJugglerEX-ipa
+          path: ios/App/build/Build/Products/Release-iphoneos/ImJugglerEX.ipa
+          retention-days: 30
