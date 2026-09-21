@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="format-detection" content="telephone=no">
+<title>アイムジャグラーEX (6号機) v4.1</title>
+<link rel="icon" type="image/png" href="./icon/gogo.png">
+<link rel="apple-touch-icon" href="./icon/gogo.png">
+<meta name="theme-color" content="#101014">
+<link rel="stylesheet" href="./style.css">
+<style>
+/* ===== iOSアプリ(WKWebView)用の調整 ===== */
+html, body {
+  /* ノッチ・ホームインジケータを避ける */
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  box-sizing: border-box;
+  /* 端までスワイプした時のバウンドを止める */
+  overscroll-behavior: none;
+  -webkit-overflow-scrolling: auto;
+}
+* {
+  /* 長押しの選択・コールアウト・タップ時のハイライトを無効化
+     (停止ボタンを連打した時に文字が選択されるのを防ぐ) */
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+</style>
+<script>
+/* ダブルタップによる拡大を無効化(停止ボタンの連打で発動してしまうため) */
+document.addEventListener('gesturestart', e => e.preventDefault());
+let __lastTouch = 0;
+document.addEventListener('touchend', e => {
+  const now = Date.now();
+  if (now - __lastTouch <= 300) e.preventDefault();
+  __lastTouch = now;
+}, { passive: false });
+</script>
+</head>
+<body>
+<div id="app">
+
+  <!-- ▼ データカウンター ▼ -->
+  <header id="dataPanel">
+    <div class="dp-top">
+      <span class="dp-unit">0001番台</span>
+      <span class="dp-name">アイムジャグラーEX (6号機) v4.1</span>
+      <button class="dp-auto" id="dpAuto">Auto</button>
+      <button class="dp-vol" id="btnVolPop">♪</button>
+    </div>
+    <div class="dp-body">
+    <div class="dp-grid">
+      <div class="dp-item">
+        <span class="dp-label red">BB</span>
+        <span class="dp-num red" id="dpBB">0</span>
+      </div>
+      <div class="dp-item">
+        <span class="dp-label yellow">RB</span>
+        <span class="dp-num yellow" id="dpRB">0</span>
+      </div>
+      <div class="dp-item">
+        <span class="dp-label green">スタート</span>
+        <span class="dp-num green" id="dpStart">0</span>
+      </div>
+    </div>
+    <div class="dp-side">
+      <div class="dp-item" id="dpTotalBox">
+        <span class="dp-label green" id="dpTotalLabel">総回転数</span>
+        <span class="dp-num green" id="dpTotal">0</span>
+      </div>
+      <div class="dp-item" id="dpGoseiBox">
+        <span class="dp-label green" id="dpGoseiLabel">合成確率</span>
+        <span class="dp-num green" id="dpGosei">1/---</span>
+      </div>
+    </div>
+    <div id="bonusGraph" role="button" tabindex="0" title="タップでボーナス履歴一覧"></div>
+    </div>
+  </header>
+
+  <!-- ▼ 筐体 ▼ -->
+  <main id="machine">
+
+    <!-- 上部バナー -->
+    <div id="topBanner">
+      <div class="banner-inner">
+        <span class="banner-sub">LET'S PLAY EXCITING GAME</span>
+        <span class="banner-main">BIG CHANCE!</span>
+        <span class="banner-777">7 7 7</span>
+      </div>
+    </div>
+
+    <!-- 情報バー(持ちメダル/投資) -->
+    <div id="walletBar">
+      <div class="wallet-item"><span class="w-label">持ちメダル</span><span class="w-num" id="wMochi">0</span><span class="w-unit">枚</span></div>
+      <div class="wallet-item"><span class="w-label">投資</span><span class="w-num" id="wInvest">0</span><span class="w-unit">円</span></div>
+      <div class="wallet-item"><span class="w-label">回収</span><span class="w-num" id="wKaishu">0</span><span class="w-unit">円</span></div>
+      <div class="wallet-item"><span class="w-label">差額</span><span class="w-num" id="wDiff">+0</span><span class="w-unit">円</span></div>
+    </div>
+
+    <!-- リールセクション -->
+    <section id="reelSection">
+      <div id="reelFrame">
+        <div id="betLamps">
+          <span class="bet-lamp" id="betLamp3">3</span>
+          <span class="bet-lamp" id="betLamp2">2</span>
+          <span class="bet-lamp" id="betLamp1">1</span>
+        </div>
+        <div id="reelWindow">
+          <div class="reel" id="reel0"><div class="strip"></div><div class="shade"></div></div>
+          <div class="reel" id="reel1"><div class="strip"></div><div class="shade"></div></div>
+          <div class="reel" id="reel2"><div class="strip"></div><div class="shade"></div></div>
+        </div>
+        <div id="stateLamps">
+          <span class="state-lamp" id="lampStart">Start</span>
+          <span class="state-lamp" id="lampReplay">Replay</span>
+          <span class="state-lamp" id="lampWait">Wait</span>
+          <span class="state-lamp" id="lampInsert">Insert<br>Medals</span>
+        </div>
+      </div>
+
+      <!-- ランプ + 7セグ -->
+      <div id="underReel">
+        <div id="gogoLamp">
+          <img id="gogoImg" src="./GOGO/GOGOCHANCE_0.png" alt="GOGO!CHANCE" draggable="false">
+          <img id="gogoImgOn" src="./GOGO/GOGOCHANCE_1.png" alt="" draggable="false" hidden>
+          <img id="gogoImgRainbow" src="./GOGO/GOGOCHANCE_2.png" alt="" draggable="false" hidden>
+        </div>
+        <div id="segArea">
+          <div class="seg-box">
+            <span class="seg-value" id="segCredit">0</span>
+            <span class="seg-label">CREDIT</span>
+          </div>
+          <div class="seg-box">
+            <span class="seg-value" id="segBonus">---</span>
+            <span class="seg-label">COUNT</span>
+          </div>
+          <div class="seg-box">
+            <span class="seg-value" id="segPayout">0</span>
+            <span class="seg-label">PAY OUT</span>
+          </div>
+        </div>
+      </div>
+
+      <div id="msgBar">メダルを借りてゲームスタート!</div>
+    </section>
+
+    <!-- 操作パネル -->
+    <section id="controlPanel">
+      <div class="ctrl-row top">
+        <button class="sub-btn" id="btnRent">貸出<small>1000円</small></button>
+        <button class="sub-btn" id="btnBet1">1BET</button>
+        <button class="sub-btn max" id="btnMaxBet">MAX<br>BET</button>
+        <button class="sub-btn" id="btnPayback">精算</button>
+        <button class="sub-btn gear" id="btnMenu">☰</button>
+      </div>
+      <div class="ctrl-row main">
+        <div id="lever">
+          <div class="lever-stick"></div>
+          <div class="lever-ball"></div>
+          <span class="lever-label">LEVER</span>
+        </div>
+        <div id="stopBtns">
+          <button class="stop-btn" id="stop0" data-reel="0"><span></span></button>
+          <button class="stop-btn" id="stop1" data-reel="1"><span></span></button>
+          <button class="stop-btn" id="stop2" data-reel="2"><span></span></button>
+        </div>
+      </div>
+      <div id="keyGuide">PC: [Space]レバー / [←][↓][→]ストップ / [↑]MAXBET / [1]1BET / [Insert]貸出 / [A]オート</div>
+    </section>
+
+  </main>
+
+  <footer id="footer">
+    <a href="https://github.com/h1ro223" target="_blank" rel="noopener">made by hiro/ヒロ</a>
+  </footer>
+
+  <!-- ▼ ハンバーガーメニュー ▼ -->
+  <div id="modalOverlay" hidden>
+    <div id="modal">
+      <h2>MENU</h2>
+      <div id="menuBtns">
+        <button class="menu-btn" id="btnCatMinigame">ミニゲーム</button>
+        <button class="menu-btn" id="btnCatMission">ミッション</button>
+        <button class="menu-btn" id="btnCatSound">サウンドルーム</button>
+        <button class="menu-btn" id="btnPayList">小役一覧</button>
+        <button class="menu-btn" id="btnCatMachine">台設定</button>
+        <button class="menu-btn" id="btnCatSystem">システム設定</button>
+        <button class="menu-btn danger-menu" id="btnCatReset">リセット</button>
+      </div>
+      <button id="btnCloseModal">閉じる</button>
+      <p class="modal-credit">made by hiro/ヒロ<br><a href="https://github.com/h1ro223" target="_blank" rel="noopener">https://github.com/h1ro223</a></p>
+    </div>
+  </div>
+
+  <!-- ▼ 台設定ポップアップ ▼ -->
+  <div id="machineOverlay" class="sub-overlay" hidden>
+    <div id="machineModal" class="sub-modal">
+      <h2>台設定</h2>
+      <div class="modal-section">
+        <h3>設定 <span class="current-setting" id="currentSetting">現在:設定1</span></h3>
+        <div id="settingBtns">
+          <button class="setting-btn" data-s="1">1</button>
+          <button class="setting-btn" data-s="2">2</button>
+          <button class="setting-btn" data-s="3">3</button>
+          <button class="setting-btn" data-s="4">4</button>
+          <button class="setting-btn" data-s="5">5</button>
+          <button class="setting-btn" data-s="6">6</button>
+        </div>
+      </div>
+      <div class="modal-section">
+        <h3>オプション</h3>
+        <label class="toggle-row">
+          <span>オート倍速モード<small>(ONでオート速度を選択可・リール回転速度は×1.0固定)</small></span>
+          <input type="checkbox" id="chkAutoTurbo">
+        </label>
+        <div id="aspeedBtns">
+          <button class="aspeed-btn" data-v="1" disabled>×1.0</button>
+          <button class="aspeed-btn" data-v="2" disabled>×2.0</button>
+          <button class="aspeed-btn" data-v="3" disabled>×3.0</button>
+          <button class="aspeed-btn" data-v="4" disabled>×4.0</button>
+          <button class="aspeed-btn" data-v="5" disabled>×5.0</button>
+        </div>
+        <div class="toggle-row"><span>リール回転速度</span></div>
+        <div id="speedBtns">
+          <button class="speed-btn" data-v="0.25">×0.25</button>
+          <button class="speed-btn" data-v="0.5">×0.5</button>
+          <button class="speed-btn" data-v="1">×1.0</button>
+        </div>
+        <button class="gold-btn" id="btnForcePeka">次ゲームでGOGO!CHANCE点灯</button>
+        <div class="startg-row">
+          <span>スタートG数<small>(777ver検証用)</small></span>
+          <input type="number" id="inStartG" min="0" max="9999" step="1" value="0">
+          <button id="btnSetStartG">適用</button>
+        </div>
+        <button class="gold-btn" id="btnSkipBonus" disabled>現在のボーナスをスキップ</button>
+        <button class="menu-btn" id="btnCustomProb">カスタム設定モード</button>
+      </div>
+      <button class="sub-close" id="btnCloseMachine">閉じる</button>
+    </div>
+  </div>
+
+  <!-- ▼ システム設定ポップアップ ▼ -->
+  <div id="systemOverlay" class="sub-overlay" hidden>
+    <div id="systemModal" class="sub-modal">
+      <h2>システム設定</h2>
+      <div class="modal-section">
+        <h3>表示</h3>
+        <label class="toggle-row">
+          <span>メッセージバー表示<small>(下部の文字表示。OFFで画面を圧縮)</small></span>
+          <input type="checkbox" id="chkMsgBar">
+        </label>
+      </div>
+      <div class="modal-section">
+        <h3>ゲーム操作</h3>
+        <label class="toggle-row">
+          <span>GOGO!CHANCE中は1BETのみにする<small>(点灯中はMAXBETを押しても1枚だけ投入)</small></span>
+          <input type="checkbox" id="chkGogo1Bet">
+        </label>
+        <label class="toggle-row">
+          <span>簡単レバーモード<small>(BET0でレバーを引くとMAXBET→レバーをまとめて実行)</small></span>
+          <input type="checkbox" id="chkEasyLever">
+        </label>
+      </div>
+      <div class="modal-section">
+        <h3>サウンド</h3>
+        <label class="toggle-row">
+          <span>BGM</span>
+          <input type="checkbox" id="chkBgm2" checked>
+        </label>
+        <div class="vol-row"><span>BGM音量</span><input type="range" id="volBgm2" min="0" max="100" value="50"></div>
+        <label class="toggle-row">
+          <span>SE(効果音)</span>
+          <input type="checkbox" id="chkSe2" checked>
+        </label>
+        <div class="vol-row"><span>SE音量</span><input type="range" id="volSe2" min="0" max="100" value="35"></div>
+      </div>
+      <div class="modal-section">
+        <h3>表示モード</h3>
+        <button class="menu-btn" id="btnCatData">データ表示モード (PC推奨)<small id="dataBtnState"></small></button>
+      </div>
+      <div class="modal-section">
+        <h3>データ管理</h3>
+        <div class="io-btns">
+          <button class="gold-btn" id="btnExportData">エクスポート<small>JSON保存</small></button>
+          <button class="gold-btn" id="btnImportData">インポート<small>JSON読込</small></button>
+        </div>
+        <input type="file" id="importFile" accept=".json,application/json" hidden>
+      </div>
+      <button class="sub-close" id="btnCloseSystem">閉じる</button>
+    </div>
+  </div>
+
+  <!-- ▼ ミッションポップアップ ▼ -->
+  <div id="missionOverlay" class="sub-overlay" hidden>
+    <div id="missionModal" class="sub-modal">
+      <h2>ミッション</h2>
+      <p class="custom-status" id="msSummary"></p>
+      <div id="msList"></div>
+      <button class="sub-close" id="btnCloseMission">閉じる</button>
+    </div>
+  </div>
+
+  <!-- ▼ ボーナス履歴一覧ポップアップ ▼ -->
+  <div id="bonusLogOverlay" class="sub-overlay" hidden>
+    <div id="bonusLogModal" class="sub-modal">
+      <h2>ボーナス履歴</h2>
+      <p class="custom-status" id="blSummary"></p>
+      <div id="blList"></div>
+      <button class="sub-close" id="btnCloseBonusLog">閉じる</button>
+    </div>
+  </div>
+
+  <!-- ▼ サウンドルームポップアップ ▼ -->
+  <div id="soundOverlay" class="sub-overlay" hidden>
+    <div id="soundModal" class="sub-modal">
+      <h2>サウンドルーム</h2>
+      <div id="srPlayer">
+        <div id="srTitle">曲を選んでください</div>
+        <input type="range" id="srSeek" min="0" max="1000" value="0" disabled>
+        <div id="srTime"><span id="srCur">0:00</span><span id="srDur">0:00</span></div>
+        <div id="srCtrl">
+          <button class="sr-btn" id="srPrev">⏮</button>
+          <button class="sr-btn big" id="srPlay">▶</button>
+          <button class="sr-btn" id="srNext">⏭</button>
+          <button class="sr-btn" id="srLoop">🔁</button>
+        </div>
+        <div class="vol-row"><span>音量</span><input type="range" id="srVol" min="0" max="100" value="50"></div>
+      </div>
+      <div id="srList"></div>
+      <button class="sub-close" id="btnCloseSound">閉じる</button>
+    </div>
+  </div>
+
+  <!-- ▼ ミニゲーム選択ポップアップ ▼ -->
+  <div id="minigameOverlay" class="sub-overlay" hidden>
+    <div id="minigameModal" class="sub-modal">
+      <h2>ミニゲーム</h2>
+      <p class="custom-note">通常プレイとは別の遊び方です。プレイ中は台設定などの一部機能が使えなくなります。</p>
+      <div id="mgBtns">
+        <button class="menu-btn" id="btnMgChallenge">設定判別チャレンジ<small>隠し設定を推理して当てる</small></button>
+        <button class="menu-btn" id="btnMgTa">目押しTA<small>ボーナスを揃えるまでのタイムアタック</small></button>
+      </div>
+      <button class="sub-close" id="btnCloseMinigame">閉じる</button>
+    </div>
+  </div>
+
+  <!-- ▼ 目押しTAポップアップ ▼ -->
+  <div id="taOverlay" class="sub-overlay" hidden>
+    <div id="taModal" class="sub-modal">
+      <h2>目押しTA</h2>
+      <p class="custom-note">
+        ボーナスを揃えるまでのタイムを競うモードです。<br>
+        <b>1G目</b>… 3つの停止ボタンを押して離すと<b>必ずペカります</b>(適当押しでOK)。<br>
+        <b>2G目</b>… <b>レバーを引いた瞬間に計測開始</b>。7・7・7(BB)または7・7・BAR(RB)を狙ってください。<br>
+        <b>揃えた瞬間に計測終了</b>。目押しをミスすると小役が揃うこともあります。
+      </p>
+      <p class="custom-status" id="taStatus"></p>
+      <p class="ch-record" id="taRecord"></p>
+      <button class="gold-btn" id="btnTaStart">スタート</button>
+      <button class="danger-btn ch-quit" id="btnTaQuit" hidden>諦める (通常プレイに戻る)</button>
+      <button class="sub-close" id="btnCloseTa">閉じる</button>
+    </div>
+  </div>
+
+  <!-- ▼ 目押しTA 結果ポップアップ ▼ -->
+  <div id="taResultOverlay" class="sub-overlay" hidden>
+    <div id="taResultModal" class="sub-modal">
+      <h2 id="taResultTitle">RESULT</h2>
+      <p class="ta-newrec" id="taNewRec" hidden>★ NEW RECORD ★</p>
+      <p class="ta-result-type" id="taResultType"></p>
+      <div class="ta-result-time" id="taResultTime">0:00.000</div>
+      <p class="ta-result-best" id="taResultBest"></p>
+      <button class="gold-btn" id="btnTaRetry">再プレイ</button>
+      <button class="sub-close" id="btnTaClose">通常プレイに戻る</button>
+    </div>
+  </div>
+
+  <!-- ▼ 設定判別チャレンジポップアップ ▼ -->
+  <div id="challengeOverlay" class="sub-overlay" hidden>
+    <div id="challengeModal" class="sub-modal">
+      <h2>設定判別チャレンジ</h2>
+      <p class="custom-note">ランダムに選ばれた隠し設定(1〜6)を、実際に打って推理して当てるモードです。開始するとデータ(回転数・履歴)はリセットされ、答えるまで設定変更・カスタム設定・GOGO確定は使えません。</p>
+      <p class="custom-status" id="chStatus"></p>
+      <div id="chProgress" hidden>
+        <div id="chStats"></div>
+        <p class="ch-label">設定を答える:</p>
+        <div id="chAnswerBtns">
+          <button class="ch-ans-btn" data-a="1">1</button>
+          <button class="ch-ans-btn" data-a="2">2</button>
+          <button class="ch-ans-btn" data-a="3">3</button>
+          <button class="ch-ans-btn" data-a="4">4</button>
+          <button class="ch-ans-btn" data-a="5">5</button>
+          <button class="ch-ans-btn" data-a="6">6</button>
+        </div>
+        <button class="danger-btn ch-quit" id="btnChQuit">チャレンジを中止</button>
+      </div>
+      <button class="gold-btn" id="btnChStart">チャレンジ開始</button>
+      <p class="ch-record" id="chRecord"></p>
+      <button class="sub-close" id="btnCloseChallenge">閉じる</button>
+    </div>
+  </div>
+
+  <!-- ▼ カスタム設定モードポップアップ ▼ -->
+  <div id="customOverlay" class="sub-overlay" hidden>
+    <div id="customModal" class="sub-modal">
+      <h2>カスタム設定モード</h2>
+      <p class="custom-note">各役の確率を「1/○○」の分母で指定できます(1以上)。<br>適用中は設定1〜6の代わりにこの確率で抽選します。</p>
+      <div id="customRows"></div>
+      <div class="custom-btns">
+        <button class="gold-btn" id="btnCustomApply">適用する</button>
+        <button class="sub-close" id="btnCustomOff">解除(通常設定に戻す)</button>
+      </div>
+      <button class="sub-close" id="btnCloseCustom">閉じる</button>
+    </div>
+  </div>
+
+  <!-- ▼ 音量設定ポップアップ (♪ボタン) ▼ -->
+  <div id="volOverlay" class="sub-overlay" hidden>
+    <div id="volModal" class="sub-modal">
+      <h2>音量設定</h2>
+      <label class="toggle-row">
+        <span>BGM</span>
+        <input type="checkbox" id="chkBgm" checked>
+      </label>
+      <div class="vol-row"><span>BGM音量</span><input type="range" id="volBgm" min="0" max="100" value="50"></div>
+      <label class="toggle-row">
+        <span>SE(効果音)</span>
+        <input type="checkbox" id="chkSe" checked>
+      </label>
+      <div class="vol-row"><span>SE音量</span><input type="range" id="volSe" min="0" max="100" value="35"></div>
+      <button class="sub-close" id="btnCloseVol">閉じる</button>
+    </div>
+  </div>
+
+  <!-- ▼ リセットポップアップ ▼ -->
+  <div id="resetOverlay" class="sub-overlay" hidden>
+    <div id="resetModal" class="sub-modal">
+      <h2>リセット</h2>
+      <p class="custom-status" id="resetTaNote" hidden>目押しTA中はリセットできません</p>
+      <div class="reset-list">
+        <button class="danger-btn" id="btnResetData">台データリセット<small>BB/RB回数・回転数・履歴グラフを初期化</small></button>
+        <button class="danger-btn" id="btnResetMission">ミッション・進捗リセット<small>ミッションの達成状況・進捗を初期化</small></button>
+        <button class="danger-btn" id="btnResetAll">全リセット<small>メダル・投資・設定・目押しTA記録などすべて初期化</small></button>
+      </div>
+      <button class="sub-close" id="btnCloseReset">閉じる</button>
+    </div>
+  </div>
+
+  <!-- ▼ 確認ポップアップ ▼ -->
+  <div id="confirmOverlay" class="sub-overlay" hidden>
+    <div id="confirmModal" class="sub-modal">
+      <h2>確認</h2>
+      <p id="confirmMsg"></p>
+      <div class="confirm-btns">
+        <button class="danger-btn" id="btnConfirmYes">はい</button>
+        <button class="sub-close" id="btnConfirmNo">いいえ</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ▼ 小役一覧オーバーレイ ▼ -->
+  <div id="payOverlay" hidden>
+    <div id="payModal">
+      <h2>小役一覧</h2>
+      <table id="payTable">
+        <tr><td class="pt-sym"><span class="pt7">7･7･7</span></td><td>BIG BONUS<small>最大+252枚</small></td></tr>
+        <tr><td class="pt-sym"><span class="pt7">7･7･<span class="ptbar">BAR</span></span></td><td>REGULAR BONUS<small>最大+96枚</small></td></tr>
+        <tr><td class="pt-sym">🔔🔔🔔</td><td><b>14枚</b></td></tr>
+        <tr><td class="pt-sym">🤡🤡🤡</td><td><b>10枚</b></td></tr>
+        <tr><td class="pt-sym">🍇🍇🍇</td><td><b>8枚</b><small>2BET時のみ 14枚</small></td></tr>
+        <tr><td class="pt-sym">🍒</td><td><b>1枚</b><small>1･2BET時 7枚 / ライン毎(角=2ライン分)</small></td></tr>
+        <tr><td class="pt-sym">🔁🔁🔁</td><td>リプレイ<small>再遊技</small></td></tr>
+      </table>
+      <p class="pay-note">※ボーナス中は2BET固定・毎ゲーム🍇(14枚)</p>
+      <button id="btnClosePay">閉じる</button>
+    </div>
+  </div>
+
+  <!-- ▼ 777ver疑似リプレイ暗転 ▼ -->
+  <div id="xDimOverlay" hidden><div id="xDimHole"></div></div>
+
+  <!-- ▼ ミッションクリア通知 ▼ -->
+  <div id="missionToast" hidden>
+    <span class="mt-icon">🏆</span>
+    <div class="mt-body"><b>ミッションクリア!</b><span id="mtName"></span></div>
+  </div>
+
+</div>
+
+<!-- ▼ データ表示パネル (データ表示モード) ▼ -->
+<aside id="dataSide" hidden>
+  <div class="ds-card">
+    <div class="ds-title-row">
+      <h3 class="ds-title">差枚推移</h3>
+      <select id="graphRange" title="表示レンジ(G数)">
+        <option value="100">100G</option>
+        <option value="200">200G</option>
+        <option value="300">300G</option>
+        <option value="500">500G</option>
+        <option value="1000" selected>1000G</option>
+      </select>
+    </div>
+    <canvas id="diffGraph" width="440" height="280"></canvas>
+  </div>
+  <div class="ds-card">
+    <h3 class="ds-title">実戦データ</h3>
+    <div class="ds-grid">
+      <div class="ds-item"><span class="ds-label">BB確率(実測)</span><span class="ds-num" id="dsBB">1/---</span></div>
+      <div class="ds-item"><span class="ds-label">RB確率(実測)</span><span class="ds-num" id="dsRB">1/---</span></div>
+      <div class="ds-item"><span class="ds-label">出玉率</span><span class="ds-num" id="dsRate">---%</span></div>
+      <div class="ds-item"><span class="ds-label">ボーナス平均G</span><span class="ds-num" id="dsAvgG">---</span></div>
+      <div class="ds-item"><span class="ds-label">現在差枚</span><span class="ds-num" id="dsDiff">+0</span></div>
+      <div class="ds-item"><span class="ds-label">設定状態</span><span class="ds-num small" id="dsSetting">設定1</span></div>
+      <div class="ds-item"><span class="ds-label">ミッション達成</span><span class="ds-num small" id="dsMission">0/50</span></div>
+      <div class="ds-item"><span class="ds-label">判別チャレンジ</span><span class="ds-num small" id="dsChallenge">-</span></div>
+    </div>
+  </div>
+</aside>
+
+<script src="./script.js"></script>
+</body>
+</html>

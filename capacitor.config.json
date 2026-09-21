@@ -1,0 +1,14 @@
+{
+  "appId": "io.github.h1ro223.imjuggler",
+  "appName": "アイムジャグラーEX シミュレーター",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https",
+    "iosScheme": "capacitor"
+  },
+  "ios": {
+    "contentInset": "always",
+    "backgroundColor": "#101014",
+    "scrollEnabled": false
+  }
+}
